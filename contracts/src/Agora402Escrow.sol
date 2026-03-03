@@ -52,6 +52,9 @@ contract Agora402Escrow is ReentrancyGuard, Pausable {
     uint256 public nextEscrowId;
     mapping(uint256 => Escrow) public escrows;
 
+    /// @notice Authorized routers that can call createAndFundFor()
+    mapping(address => bool) public authorizedRouters;
+
     /// @notice Maximum escrow amount in USDC base units (6 decimals). $100 = 100_000_000
     uint256 public constant MAX_ESCROW_AMOUNT = 100_000_000;
 
@@ -93,6 +96,7 @@ contract Agora402Escrow is ReentrancyGuard, Pausable {
     event TreasuryUpdated(address indexed oldTreasury, address indexed newTreasury);
     event FeeUpdated(uint256 oldFeeBps, uint256 newFeeBps);
     event FeeCollected(uint256 indexed escrowId, uint256 feeAmount);
+    event RouterUpdated(address indexed router, bool authorized);
 
     // ─── Errors ──────────────────────────────────────────────────────────
 
@@ -109,6 +113,7 @@ contract Agora402Escrow is ReentrancyGuard, Pausable {
     error BuyerIsSeller();
     error SplitExceedsAmount();
     error FeeTooHigh();
+    error NotAuthorizedRouter();
 
     // ─── Modifiers ───────────────────────────────────────────────────────
 
@@ -187,6 +192,50 @@ contract Agora402Escrow is ReentrancyGuard, Pausable {
         usdc.safeTransferFrom(msg.sender, address(this), amount);
 
         emit EscrowCreated(escrowId, msg.sender, seller, amount, expiresAt, serviceHash);
+        emit EscrowFunded(escrowId, amount);
+    }
+
+    /// @notice Create and fund an escrow on behalf of a buyer. Only callable by authorized routers.
+    ///         Used by Agora402EscrowRouter to atomically settle x402 payments into escrow.
+    ///         Router must have approved this contract to spend `amount` USDC.
+    /// @param buyer Address of the actual buyer (the agent who signed the EIP-3009 auth)
+    /// @param seller Address of the seller/service provider
+    /// @param amount USDC amount (6 decimals)
+    /// @param timelockDuration Seconds until the escrow expires
+    /// @param serviceHash keccak256 identifier of the service being purchased
+    /// @return escrowId The ID of the newly created escrow
+    function createAndFundFor(
+        address buyer,
+        address seller,
+        uint256 amount,
+        uint256 timelockDuration,
+        bytes32 serviceHash
+    ) external nonReentrant whenNotPaused returns (uint256 escrowId) {
+        if (!authorizedRouters[msg.sender]) revert NotAuthorizedRouter();
+        if (buyer == address(0) || seller == address(0)) revert ZeroAddress();
+        if (buyer == seller) revert BuyerIsSeller();
+        if (amount < MIN_ESCROW_AMOUNT) revert AmountTooLow();
+        if (amount > MAX_ESCROW_AMOUNT) revert AmountTooHigh();
+        if (timelockDuration < MIN_TIMELOCK) revert TimelockTooShort();
+        if (timelockDuration > MAX_TIMELOCK) revert TimelockTooLong();
+
+        escrowId = nextEscrowId++;
+        uint256 expiresAt = block.timestamp + timelockDuration;
+
+        escrows[escrowId] = Escrow({
+            buyer: buyer,
+            seller: seller,
+            amount: amount,
+            createdAt: block.timestamp,
+            expiresAt: expiresAt,
+            state: EscrowState.Funded,
+            serviceHash: serviceHash
+        });
+
+        // Pull USDC from the router (msg.sender), not the buyer
+        usdc.safeTransferFrom(msg.sender, address(this), amount);
+
+        emit EscrowCreated(escrowId, buyer, seller, amount, expiresAt, serviceHash);
         emit EscrowFunded(escrowId, amount);
     }
 
@@ -343,6 +392,13 @@ contract Agora402Escrow is ReentrancyGuard, Pausable {
         if (newFeeBps > MAX_FEE_BPS) revert FeeTooHigh();
         emit FeeUpdated(feeBps, newFeeBps);
         feeBps = newFeeBps;
+    }
+
+    /// @notice Authorize or deauthorize a router contract for createAndFundFor()
+    function setRouter(address router, bool authorized) external onlyOwner {
+        if (router == address(0)) revert ZeroAddress();
+        authorizedRouters[router] = authorized;
+        emit RouterUpdated(router, authorized);
     }
 
     /// @notice Pause the contract (emergency)

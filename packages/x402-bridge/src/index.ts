@@ -1,3 +1,3 @@
-// x402 bridge — custom facilitator routing to escrow
-// Implemented directly in MCP server tools for v1
-export {};
+export { Agora402Facilitator, type Agora402FacilitatorConfig } from "./facilitator.js";
+export { startFacilitatorServer } from "./server.js";
+export { agora402RouterAbi } from "@agora402/core";

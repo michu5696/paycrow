@@ -313,4 +313,97 @@ export const agora402EscrowAbi = [
       { name: "newTreasury", type: "address", indexed: true },
     ],
   },
+  {
+    type: "function",
+    name: "authorizedRouters",
+    inputs: [{ name: "", type: "address" }],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "createAndFundFor",
+    inputs: [
+      { name: "buyer", type: "address" },
+      { name: "seller", type: "address" },
+      { name: "amount", type: "uint256" },
+      { name: "timelockDuration", type: "uint256" },
+      { name: "serviceHash", type: "bytes32" },
+    ],
+    outputs: [{ name: "escrowId", type: "uint256" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "setRouter",
+    inputs: [
+      { name: "router", type: "address" },
+      { name: "authorized", type: "bool" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "event",
+    name: "RouterUpdated",
+    inputs: [
+      { name: "router", type: "address", indexed: true },
+      { name: "authorized", type: "bool", indexed: false },
+    ],
+  },
+] as const;
+
+export const agora402RouterAbi = [
+  {
+    type: "constructor",
+    inputs: [
+      { name: "_usdc", type: "address" },
+      { name: "_escrow", type: "address" },
+    ],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "escrow",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "usdc",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "settleToEscrow",
+    inputs: [
+      { name: "from", type: "address" },
+      { name: "value", type: "uint256" },
+      { name: "validAfter", type: "uint256" },
+      { name: "validBefore", type: "uint256" },
+      { name: "nonce", type: "bytes32" },
+      { name: "v", type: "uint8" },
+      { name: "r", type: "bytes32" },
+      { name: "s", type: "bytes32" },
+      { name: "seller", type: "address" },
+      { name: "timelockDuration", type: "uint256" },
+      { name: "serviceHash", type: "bytes32" },
+    ],
+    outputs: [{ name: "escrowId", type: "uint256" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "event",
+    name: "SettledToEscrow",
+    inputs: [
+      { name: "escrowId", type: "uint256", indexed: true },
+      { name: "buyer", type: "address", indexed: true },
+      { name: "seller", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+      { name: "serviceHash", type: "bytes32", indexed: false },
+    ],
+  },
 ] as const;
