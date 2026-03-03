@@ -366,11 +366,31 @@ npx agora402
         const paymentSig = (req.headers["payment-signature"] ?? req.headers["x-payment"]) as string | undefined;
 
         if (!paymentSig) {
-          // Return 402 Payment Required with x402 v2 header
+          // Free preview: compute score but only return summary (no source breakdown)
+          // This lets agents evaluate the service before paying
+          const preview = await computeTrustScore(queryAddress, {
+            chain: chainName,
+            rpcUrl: config.rpcUrl,
+            reputationAddress: config.reputationAddress,
+            moltbookAppKey: config.moltbookAppKey,
+            basescanApiKey: config.basescanApiKey,
+          });
+
           const resource = `${url.origin}/trust/${queryAddress}`;
           const requirements = paymentRequirements(resource);
           const encoded = Buffer.from(JSON.stringify(requirements)).toString("base64");
-          json(res, 402, requirements, {
+          json(res, 402, {
+            // Free preview — enough to decide if the full report is worth $0.001
+            preview: {
+              address: queryAddress,
+              score: preview.score,
+              confidence: preview.confidence,
+              recommendation: preview.recommendation,
+              sourcesUsed: preview.sourcesUsed,
+            },
+            // Pay for full breakdown with per-source details
+            ...requirements,
+          }, {
             "PAYMENT-REQUIRED": encoded,
           });
           return;
