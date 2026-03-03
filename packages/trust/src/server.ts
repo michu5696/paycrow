@@ -20,7 +20,11 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { randomUUID } from "node:crypto";
 import { type Address, isAddress } from "viem";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { z } from "zod";
 import { computeTrustScore, type TrustEngineConfig } from "./engine.js";
 
 export interface TrustServerConfig extends TrustEngineConfig {
@@ -231,14 +235,93 @@ export function startTrustServer(config: TrustServerConfig) {
     }
   }
 
+  // ── MCP-over-HTTP (Streamable HTTP transport) ──
+  // Stateful sessions: map sessionId → transport
+  const mcpTransports = new Map<string, StreamableHTTPServerTransport>();
+
+  function createMcpServer(): McpServer {
+    const mcp = new McpServer({ name: "agora402", version: "0.5.0" });
+
+    mcp.tool(
+      "trust_score_query",
+      "Look up the composite trust score of an agent address. Aggregates 4 sources: Agora402 escrow reputation, ERC-8004 agent identity, Moltbook social karma, and Base chain activity. Score is 0-100 with confidence level.",
+      { address: z.string().describe("Ethereum address to check") },
+      async ({ address: addr }) => {
+        const score = await computeTrustScore(addr as Address, {
+          chain: chainName as "base" | "base-sepolia",
+          rpcUrl: config.rpcUrl,
+          reputationAddress: config.reputationAddress,
+          basescanApiKey: config.basescanApiKey,
+          moltbookAppKey: config.moltbookAppKey,
+        });
+        return { content: [{ type: "text" as const, text: JSON.stringify(score, null, 2) }] };
+      }
+    );
+
+    return mcp;
+  }
+
+  async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+
+    if (req.method === "POST") {
+      // Parse body
+      const body = JSON.parse(await readBody(req));
+
+      let transport: StreamableHTTPServerTransport;
+      if (sessionId && mcpTransports.has(sessionId)) {
+        transport = mcpTransports.get(sessionId)!;
+      } else {
+        // New session
+        transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: (sid) => { mcpTransports.set(sid, transport); },
+        });
+        transport.onclose = () => {
+          const sid = [...mcpTransports.entries()].find(([, t]) => t === transport)?.[0];
+          if (sid) mcpTransports.delete(sid);
+        };
+        const mcp = createMcpServer();
+        await mcp.connect(transport);
+      }
+
+      await transport.handleRequest(req, res, body);
+      return;
+    }
+
+    if (req.method === "GET") {
+      if (!sessionId || !mcpTransports.has(sessionId)) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "No active session. Send a POST first." }));
+        return;
+      }
+      await mcpTransports.get(sessionId)!.handleRequest(req, res);
+      return;
+    }
+
+    if (req.method === "DELETE") {
+      if (sessionId && mcpTransports.has(sessionId)) {
+        await mcpTransports.get(sessionId)!.handleRequest(req, res);
+        mcpTransports.delete(sessionId);
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+      return;
+    }
+
+    res.writeHead(405, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Method not allowed" }));
+  }
+
   const server = createServer(async (req, res) => {
     // CORS preflight
     if (req.method === "OPTIONS") {
       res.writeHead(204, {
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, PAYMENT-SIGNATURE, X-PAYMENT",
-        "Access-Control-Expose-Headers": "PAYMENT-REQUIRED, PAYMENT-RESPONSE, X-PAYMENT-RESPONSE",
+        "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Accept, Mcp-Session-Id, PAYMENT-SIGNATURE, X-PAYMENT",
+        "Access-Control-Expose-Headers": "Mcp-Session-Id, PAYMENT-REQUIRED, PAYMENT-RESPONSE, X-PAYMENT-RESPONSE",
       });
       res.end();
       return;
@@ -249,6 +332,12 @@ export function startTrustServer(config: TrustServerConfig) {
     const url = new URL(req.url ?? "/", `${proto}://${host}`);
 
     try {
+      // ── MCP-over-HTTP endpoint ──
+      if (url.pathname === "/mcp") {
+        await handleMcp(req, res);
+        return;
+      }
+
       // ── Health check ──
       if (req.method === "GET" && url.pathname === "/health") {
         json(res, 200, {
@@ -448,6 +537,7 @@ npx agora402
   server.listen(port, () => {
     console.log(`\nAgora402 Trust Score API running at http://localhost:${port}`);
     console.log(`  GET /trust/{address}        — Query trust score ($${Number(price) / 1e6} USDC per check)`);
+    console.log(`  POST /mcp                    — MCP-over-HTTP (Streamable HTTP)`);
     console.log(`  GET /discovery/resources     — x402 Bazaar catalog`);
     console.log(`  GET /health                  — Health check`);
     console.log(`\nChain: ${chainName} | Price: $${Number(price) / 1e6} USDC | PayTo: ${config.payTo}`);
