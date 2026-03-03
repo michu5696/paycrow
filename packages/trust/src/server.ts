@@ -9,6 +9,7 @@
  *   GET /trust/:address + payment — Returns composite trust score
  *   GET /discovery/resources      — x402 Bazaar catalog for agent discovery
  *   GET /health                   — Health check
+ *   GET /stats                    — Request counts and revenue
  *
  * The 402 flow:
  *   1. Agent requests GET /trust/0x...
@@ -42,6 +43,19 @@ export function startTrustServer(config: TrustServerConfig) {
   const usdcAddress = chainName === "base"
     ? "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
     : "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+
+  // In-memory stats (resets on deploy — good enough for now)
+  const startedAt = new Date().toISOString();
+  const stats = {
+    requests: 0,         // total hits to /trust/:address
+    paymentsAttempted: 0,
+    paymentsSettled: 0,
+    paymentsFailed: 0,
+    revenueUsdc: 0,      // in base units
+    uniqueAddresses: new Set<string>(),
+    uniquePayers: new Set<string>(),
+    lastPayment: null as string | null,
+  };
 
   function json(res: ServerResponse, status: number, data: unknown, headers?: Record<string, string>): void {
     const h: Record<string, string> = {
@@ -248,6 +262,22 @@ export function startTrustServer(config: TrustServerConfig) {
         return;
       }
 
+      // ── Stats dashboard ──
+      if (req.method === "GET" && url.pathname === "/stats") {
+        json(res, 200, {
+          upSince: startedAt,
+          requests: stats.requests,
+          paymentsAttempted: stats.paymentsAttempted,
+          paymentsSettled: stats.paymentsSettled,
+          paymentsFailed: stats.paymentsFailed,
+          revenueUsdc: `$${(stats.revenueUsdc / 1e6).toFixed(6)}`,
+          uniqueAddresses: stats.uniqueAddresses.size,
+          uniquePayers: stats.uniquePayers.size,
+          lastPayment: stats.lastPayment,
+        });
+        return;
+      }
+
       // ── .well-known/x402 manifest (x402scan discovery format) ──
       if (req.method === "GET" && url.pathname === "/.well-known/x402") {
         json(res, 200, {
@@ -324,6 +354,8 @@ npx agora402
       const trustMatch = url.pathname.match(/^\/trust\/(0x[a-fA-F0-9]{40})$/);
       if (req.method === "GET" && trustMatch) {
         const queryAddress = trustMatch[1] as Address;
+        stats.requests++;
+        stats.uniqueAddresses.add(queryAddress.toLowerCase());
 
         if (!isAddress(queryAddress)) {
           json(res, 400, { error: "Invalid Ethereum address" });
@@ -345,10 +377,12 @@ npx agora402
         }
 
         // Verify and settle payment
+        stats.paymentsAttempted++;
         const resource = `${url.origin}/trust/${queryAddress}`;
         const payment = await verifyAndSettlePayment(paymentSig, resource);
 
         if (!payment.success) {
+          stats.paymentsFailed++;
           json(res, 402, {
             error: "Payment verification failed",
             detail: payment.error,
@@ -357,7 +391,13 @@ npx agora402
           return;
         }
 
-        // Payment succeeded — compute and return trust score
+        // Payment succeeded
+        stats.paymentsSettled++;
+        stats.revenueUsdc += Number(price);
+        stats.lastPayment = new Date().toISOString();
+        if (payment.payer) stats.uniquePayers.add(payment.payer.toLowerCase());
+
+        // Compute and return trust score
         const trustScore = await computeTrustScore(queryAddress, {
           chain: chainName,
           rpcUrl: config.rpcUrl,
