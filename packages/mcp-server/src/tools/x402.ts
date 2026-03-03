@@ -1,32 +1,14 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { EscrowClient } from "@agora402/escrow-client";
 import { verify } from "@agora402/verification";
 import {
   formatUsdc,
   parseUsdc,
   type VerificationStrategy,
 } from "@agora402/core";
-import type { Hash, Address } from "viem";
+import type { Address } from "viem";
 import { keccak256, toBytes } from "viem";
-
-function getClient(): EscrowClient {
-  const privateKey = process.env.PRIVATE_KEY;
-  const escrowAddress = process.env.ESCROW_CONTRACT_ADDRESS;
-  const rpcUrl = process.env.BASE_SEPOLIA_RPC_URL;
-
-  if (!privateKey || !escrowAddress) {
-    throw new Error(
-      "PRIVATE_KEY and ESCROW_CONTRACT_ADDRESS must be set in environment"
-    );
-  }
-
-  return new EscrowClient({
-    privateKey: privateKey as Hash,
-    escrowAddress: escrowAddress as Address,
-    rpcUrl,
-  });
-}
+import { getEscrowClient } from "../config.js";
 
 export function registerX402Tools(server: McpServer): void {
   server.tool(
@@ -86,7 +68,7 @@ Use this instead of direct x402 payments to get buyer protection. If the API ret
       verification_strategy,
       verification_data,
     }) => {
-      const client = getClient();
+      const client = getEscrowClient();
       const amount = parseUsdc(amount_usdc);
       const timelockDuration = BigInt(timelock_minutes * 60);
       const serviceHash = keccak256(toBytes(url));

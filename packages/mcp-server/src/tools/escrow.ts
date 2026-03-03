@@ -1,33 +1,9 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { EscrowClient } from "@agora402/escrow-client";
-import {
-  EscrowState,
-  formatUsdc,
-  parseUsdc,
-  ESCROW_LIMITS,
-  DEFAULT_TIMELOCK_SECONDS,
-} from "@agora402/core";
-import type { Hash, Address } from "viem";
+import { formatUsdc, parseUsdc } from "@agora402/core";
+import type { Address } from "viem";
 import { keccak256, toBytes } from "viem";
-
-function getClient(): EscrowClient {
-  const privateKey = process.env.PRIVATE_KEY;
-  const escrowAddress = process.env.ESCROW_CONTRACT_ADDRESS;
-  const rpcUrl = process.env.BASE_SEPOLIA_RPC_URL;
-
-  if (!privateKey || !escrowAddress) {
-    throw new Error(
-      "PRIVATE_KEY and ESCROW_CONTRACT_ADDRESS must be set in environment"
-    );
-  }
-
-  return new EscrowClient({
-    privateKey: privateKey as Hash,
-    escrowAddress: escrowAddress as Address,
-    rpcUrl,
-  });
-}
+import { getEscrowClient } from "../config.js";
 
 export function registerEscrowTools(server: McpServer): void {
   server.tool(
@@ -57,7 +33,7 @@ export function registerEscrowTools(server: McpServer): void {
         ),
     },
     async ({ seller, amount_usdc, timelock_minutes, service_url }) => {
-      const client = getClient();
+      const client = getEscrowClient();
 
       const amount = parseUsdc(amount_usdc);
       const timelockDuration = BigInt(timelock_minutes * 60);
@@ -101,7 +77,7 @@ export function registerEscrowTools(server: McpServer): void {
       escrow_id: z.string().describe("The escrow ID to release"),
     },
     async ({ escrow_id }) => {
-      const client = getClient();
+      const client = getEscrowClient();
       const escrowId = BigInt(escrow_id);
 
       const txHash = await client.release(escrowId);
@@ -133,7 +109,7 @@ export function registerEscrowTools(server: McpServer): void {
         .describe("Brief description of the problem for the arbiter"),
     },
     async ({ escrow_id, reason }) => {
-      const client = getClient();
+      const client = getEscrowClient();
       const escrowId = BigInt(escrow_id);
 
       const txHash = await client.dispute(escrowId);
@@ -163,7 +139,7 @@ export function registerEscrowTools(server: McpServer): void {
       escrow_id: z.string().describe("The escrow ID to check"),
     },
     async ({ escrow_id }) => {
-      const client = getClient();
+      const client = getEscrowClient();
       const escrowId = BigInt(escrow_id);
 
       const data = await client.getEscrow(escrowId);

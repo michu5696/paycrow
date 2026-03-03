@@ -8,9 +8,19 @@ Install as an MCP server. Your agent gets escrow-protected payments in one tool 
 
 ## Quick Start
 
-### Claude Desktop / Claude Code
+### 1. Generate a wallet
 
-Add to your MCP config:
+```bash
+npx agora402 init
+```
+
+This creates a fresh wallet and prints your Claude Desktop config — copy-paste and go.
+
+### 2. Fund it
+
+Send a small amount of ETH (for gas, ~$0.50) and USDC (for payments) to the printed address on **Base**.
+
+### 3. Add to Claude Desktop
 
 ```json
 {
@@ -19,19 +29,19 @@ Add to your MCP config:
       "command": "npx",
       "args": ["agora402"],
       "env": {
-        "PRIVATE_KEY": "0x_YOUR_WALLET_PRIVATE_KEY",
-        "ESCROW_CONTRACT_ADDRESS": "0x_DEPLOYED_CONTRACT_ADDRESS",
-        "BASE_SEPOLIA_RPC_URL": "https://sepolia.base.org"
+        "PRIVATE_KEY": "0x_YOUR_KEY_FROM_INIT"
       }
     }
   }
 }
 ```
 
+Restart Claude Desktop. Done — your agent now has escrow-protected payments.
+
 ### Any MCP Client
 
 ```bash
-npx agora402
+PRIVATE_KEY=0x... npx agora402
 ```
 
 Runs over stdio. Compatible with any MCP client (Claude Desktop, Claude Code, Cursor, Windsurf, OpenClaw, etc).
@@ -40,9 +50,12 @@ Runs over stdio. Compatible with any MCP client (Claude Desktop, Claude Code, Cu
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `PRIVATE_KEY` | Yes | Wallet private key (hex, with 0x prefix) |
-| `ESCROW_CONTRACT_ADDRESS` | Yes | Deployed Agora402Escrow contract address |
-| `BASE_SEPOLIA_RPC_URL` | No | RPC URL (defaults to Base Sepolia) |
+| `PRIVATE_KEY` | **Yes** | Wallet private key (hex, with 0x prefix) |
+| `CHAIN` | No | `"base"` for mainnet, defaults to Base Sepolia |
+| `BASE_RPC_URL` | No | Custom RPC URL for Base mainnet |
+| `BASE_SEPOLIA_RPC_URL` | No | Custom RPC URL for Base Sepolia |
+
+Contract addresses are hardcoded — no need to configure them.
 
 ## Tools
 
@@ -52,7 +65,7 @@ Make an API call with automatic escrow protection. One tool call does everything
 
 1. Creates USDC escrow on-chain
 2. Calls the API
-3. Verifies the response (schema or hash-lock)
+3. Verifies the response (JSON Schema or hash-lock)
 4. Auto-releases payment if valid, auto-disputes if not
 
 ```
@@ -72,54 +85,23 @@ Parameters:
 
 Create a USDC escrow manually for any agent-to-agent transaction.
 
-```
-Parameters:
-  seller       — Seller's Ethereum address
-  amount_usdc  — Amount in USDC ($0.10 - $100)
-  service_url  — URL/identifier of the service
-  timelock_minutes — Auto-refund timeout (default: 30)
-```
-
 ### `escrow_release`
 
 Confirm delivery and release funds to the seller.
-
-```
-Parameters:
-  escrow_id — The escrow ID to release
-```
 
 ### `escrow_dispute`
 
 Flag bad delivery. Locks funds for arbiter review.
 
-```
-Parameters:
-  escrow_id — The escrow ID to dispute
-  reason    — Description of the problem
-```
-
 ### `escrow_status`
 
 Check the current state of an escrow.
 
-```
-Parameters:
-  escrow_id — The escrow ID to check
-```
-
-Returns: state (Funded/Released/Disputed/Resolved/Expired/Refunded), buyer, seller, amount, timestamps.
-
 ### `trust_score_query`
 
-Look up any agent's trust score before transacting. Scores are 0-100 based on escrow history.
+Look up any agent's on-chain trust score before transacting. Reads the Agora402 Reputation contract — scores are 0-100 based on real escrow history, not self-reported.
 
-```
-Parameters:
-  address — Ethereum address to look up
-```
-
-Returns: score, success rate, recommendation (high_trust / moderate_trust / low_trust).
+Returns: score, success rate, volume, timestamps, recommendation (high_trust / moderate_trust / low_trust).
 
 ## How It Works
 
@@ -144,22 +126,27 @@ FUNDED → RELEASED         (delivery confirmed, seller paid minus 2% fee)
 - 2% protocol fee on release/resolve. Zero fee on refund.
 - $0.10 minimum, $100 maximum per escrow (v1 safety cap).
 - Timelock: 5 minutes to 30 days.
+- On-chain reputation auto-recorded for every escrow outcome.
 
 ## Chain
 
-- **Testnet:** Base Sepolia
-- **Token:** USDC (0x036CbD53842c5426634e7929541eC2318f3dCF7e)
-- **Gas:** ~$0.005 per escrow cycle on Base L2
+| | Testnet | Mainnet |
+|-|---------|---------|
+| **Network** | Base Sepolia | Base |
+| **USDC** | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
+| **Gas cost** | ~$0.005/escrow cycle | ~$0.005/escrow cycle |
+
+Set `CHAIN=base` for mainnet. Defaults to Base Sepolia.
 
 ## Contract
 
-Solidity smart contract with:
+Solidity smart contracts with:
+- Escrow: full 7-state machine with 2% protocol fee
+- Reputation: on-chain trust scores based on escrow history
 - OpenZeppelin ReentrancyGuard + Pausable
-- Full state machine (7 states)
-- Fuzz-tested (66 tests, 1000 fuzz runs)
-- Emergency pause via owner multisig
+- 135 tests (unit + fuzz + invariant + integration)
 
-Source: [contracts/src/Agora402Escrow.sol](https://github.com/TODO/agora402/blob/main/contracts/src/Agora402Escrow.sol)
+Source: [github.com/michu5696/agora402](https://github.com/michu5696/agora402)
 
 ## License
 

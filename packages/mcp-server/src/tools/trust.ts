@@ -1,36 +1,37 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createPublicClient, http, type Address } from "viem";
-import { baseSepolia } from "viem/chains";
 import {
   agora402ReputationAbi,
   formatUsdc,
   type OnChainReputation,
 } from "@agora402/core";
-
-const REPUTATION_ADDRESS =
-  (process.env.REPUTATION_CONTRACT_ADDRESS as Address) ??
-  "0x2A216a829574e88dD632e7C95660d43bCE627CDf";
-
-const RPC_URL = process.env.BASE_SEPOLIA_RPC_URL ?? "https://sepolia.base.org";
+import {
+  getChain,
+  getRpcUrl,
+  getChainName,
+  getReputationAddress,
+} from "../config.js";
 
 const publicClient = createPublicClient({
-  chain: baseSepolia,
-  transport: http(RPC_URL),
+  chain: getChain(),
+  transport: http(getRpcUrl()),
 });
 
 async function queryOnChainReputation(
   address: Address
 ): Promise<{ score: number; reputation: OnChainReputation }> {
+  const reputationAddress = getReputationAddress();
+
   const [score, repData] = await Promise.all([
     publicClient.readContract({
-      address: REPUTATION_ADDRESS,
+      address: reputationAddress,
       abi: agora402ReputationAbi,
       functionName: "getScore",
       args: [address],
     }),
     publicClient.readContract({
-      address: REPUTATION_ADDRESS,
+      address: reputationAddress,
       abi: agora402ReputationAbi,
       functionName: "getReputation",
       args: [address],
@@ -66,13 +67,15 @@ async function queryOnChainReputation(
 export function registerTrustTools(server: McpServer): void {
   server.tool(
     "trust_score_query",
-    "Look up the on-chain trust score of an agent address before transacting. Queries the Agora402 Reputation contract on Base Sepolia. Score is 0-100 based on escrow history.",
+    "Look up the on-chain trust score of an agent address before transacting. Queries the Agora402 Reputation contract on Base. Score is 0-100 based on escrow history.",
     {
       address: z
         .string()
         .describe("Ethereum address of the agent to look up"),
     },
     async ({ address }) => {
+      const reputationAddress = getReputationAddress();
+
       try {
         const { score, reputation } = await queryOnChainReputation(
           address as Address
@@ -97,8 +100,8 @@ export function registerTrustTools(server: McpServer): void {
                     message:
                       "No on-chain escrow history found. This is a new/unknown agent — proceed with caution and use small escrow amounts.",
                     recommendation: "low_trust",
-                    contract: REPUTATION_ADDRESS,
-                    chain: "base-sepolia",
+                    contract: reputationAddress,
+                    chain: getChainName(),
                   },
                   null,
                   2
@@ -148,8 +151,8 @@ export function registerTrustTools(server: McpServer): void {
                         ).toISOString()
                       : null,
                   recommendation,
-                  contract: REPUTATION_ADDRESS,
-                  chain: "base-sepolia",
+                  contract: reputationAddress,
+                  chain: getChainName(),
                 },
                 null,
                 2

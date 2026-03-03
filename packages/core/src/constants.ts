@@ -1,13 +1,29 @@
 import type { Address } from "viem";
-import { baseSepolia } from "viem/chains";
+import { base, baseSepolia } from "viem/chains";
 
 export const USDC_DECIMALS = 6;
 
 export const USDC_ADDRESSES: Record<number, Address> = {
+  [base.id]: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
   [baseSepolia.id]: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
 };
 
-export const SUPPORTED_CHAINS = [baseSepolia] as const;
+export const SUPPORTED_CHAINS = [base, baseSepolia] as const;
+
+// ── Deployed contract addresses ─────────────────────────────────────
+// Hardcoded so users only need to set PRIVATE_KEY.
+// Env vars ESCROW_CONTRACT_ADDRESS / REPUTATION_CONTRACT_ADDRESS
+// override these if set (e.g. for custom deployments).
+
+export const ESCROW_ADDRESSES: Record<number, Address> = {
+  // [base.id]: "0x..." — filled after mainnet deploy
+  [baseSepolia.id]: "0x9Ea8c817bFDfb15FA50a30b08A186Cb213F11BCC",
+};
+
+export const REPUTATION_ADDRESSES: Record<number, Address> = {
+  // [base.id]: "0x..." — filled after mainnet deploy
+  [baseSepolia.id]: "0x2A216a829574e88dD632e7C95660d43bCE627CDf",
+};
 
 export const DEFAULT_TIMELOCK_SECONDS = {
   apiCall: 30 * 60, // 30 minutes
