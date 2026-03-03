@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.turbo/
+.env
+*.log
+
+# Foundry
+contracts/out/
+contracts/cache/
+contracts/lib/
+
+# Database
+*.db
+
+# OS
+.DS_Store
