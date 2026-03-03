@@ -407,3 +407,66 @@ export const agora402RouterAbi = [
     ],
   },
 ] as const;
+
+export const agora402ReputationAbi = [
+  {
+    type: "constructor",
+    inputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "escrowContract",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "owner",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "totalAddresses",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getReputation",
+    inputs: [{ name: "agent", type: "address" }],
+    outputs: [
+      { name: "totalCompleted", type: "uint64" },
+      { name: "totalDisputed", type: "uint64" },
+      { name: "totalRefunded", type: "uint64" },
+      { name: "totalAsProvider", type: "uint64" },
+      { name: "totalAsClient", type: "uint64" },
+      { name: "totalVolume", type: "uint256" },
+      { name: "firstSeen", type: "uint256" },
+      { name: "lastSeen", type: "uint256" },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getScore",
+    inputs: [{ name: "agent", type: "address" }],
+    outputs: [{ name: "score", type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "event",
+    name: "ReputationUpdated",
+    inputs: [
+      { name: "agent", type: "address", indexed: true },
+      { name: "outcome", type: "uint8", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+      { name: "escrowId", type: "uint256", indexed: false },
+      { name: "isProvider", type: "bool", indexed: false },
+    ],
+  },
+] as const;

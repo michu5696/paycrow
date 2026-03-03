@@ -66,6 +66,32 @@ export interface SlaDefinition {
   expectedHash?: Hash;
 }
 
+// ── On-chain reputation types ─────────────────────────────────────
+
+export enum ReputationOutcome {
+  Completed = 0,
+  Disputed = 1,
+  Refunded = 2,
+}
+
+export interface OnChainReputation {
+  totalCompleted: number;
+  totalDisputed: number;
+  totalRefunded: number;
+  totalAsProvider: number;
+  totalAsClient: number;
+  totalVolume: bigint;
+  firstSeen: bigint;
+  lastSeen: bigint;
+}
+
+export interface ReputationScore {
+  address: Address;
+  score: number;
+  reputation: OnChainReputation;
+  source: "on-chain";
+}
+
 // ── Protocol fee types ──────────────────────────────────────────────
 
 /** Constructor / deployment parameters for the Agora402Escrow contract. */

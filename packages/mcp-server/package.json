@@ -1,6 +1,6 @@
 {
   "name": "agora402",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MCP server for agent-to-agent escrow protection on x402. PayPal for autonomous agents.",
   "keywords": [
     "mcp",

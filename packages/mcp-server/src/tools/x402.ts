@@ -2,7 +2,6 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { EscrowClient } from "@agora402/escrow-client";
 import { verify } from "@agora402/verification";
-import { updateTrustScore } from "./trust.js";
 import {
   formatUsdc,
   parseUsdc,
@@ -113,7 +112,7 @@ Use this instead of direct x402 payments to get buyer protection. If the API ret
       } catch (error) {
         // API call failed — auto-dispute
         const disputeTx = await client.dispute(escrowId);
-        updateTrustScore(seller_address, "disputed");
+
 
         return {
           content: [
@@ -162,7 +161,7 @@ Use this instead of direct x402 payments to get buyer protection. If the API ret
       // Step 4: Auto-release or auto-dispute based on verification
       if (result.valid) {
         const releaseTx = await client.release(escrowId);
-        updateTrustScore(seller_address, "released");
+
 
         return {
           content: [
@@ -195,7 +194,7 @@ Use this instead of direct x402 payments to get buyer protection. If the API ret
         };
       } else {
         const disputeTx = await client.dispute(escrowId);
-        updateTrustScore(seller_address, "disputed");
+
 
         return {
           content: [

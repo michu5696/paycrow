@@ -5,6 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {Agora402Reputation} from "./Agora402Reputation.sol";
 
 /// @title Agora402Escrow
 /// @notice USDC escrow for agent-to-agent commerce on top of x402.
@@ -55,6 +56,9 @@ contract Agora402Escrow is ReentrancyGuard, Pausable {
     /// @notice Authorized routers that can call createAndFundFor()
     mapping(address => bool) public authorizedRouters;
 
+    /// @notice On-chain reputation ledger (optional, address(0) = disabled)
+    Agora402Reputation public reputation;
+
     /// @notice Maximum escrow amount in USDC base units (6 decimals). $100 = 100_000_000
     uint256 public constant MAX_ESCROW_AMOUNT = 100_000_000;
 
@@ -97,6 +101,7 @@ contract Agora402Escrow is ReentrancyGuard, Pausable {
     event FeeUpdated(uint256 oldFeeBps, uint256 newFeeBps);
     event FeeCollected(uint256 indexed escrowId, uint256 feeAmount);
     event RouterUpdated(address indexed router, bool authorized);
+    event ReputationUpdated(address indexed reputationContract);
 
     // ─── Errors ──────────────────────────────────────────────────────────
 
@@ -260,6 +265,8 @@ contract Agora402Escrow is ReentrancyGuard, Pausable {
         }
         usdc.safeTransfer(e.seller, sellerAmount);
 
+        _recordReputation(e.buyer, e.seller, e.amount, escrowId, Agora402Reputation.Outcome.Completed);
+
         emit EscrowReleased(escrowId, sellerAmount);
     }
 
@@ -306,6 +313,8 @@ contract Agora402Escrow is ReentrancyGuard, Pausable {
             usdc.safeTransfer(e.seller, sellerAmount);
         }
 
+        _recordReputation(e.buyer, e.seller, e.amount, escrowId, Agora402Reputation.Outcome.Disputed);
+
         emit EscrowResolved(escrowId, buyerAmount, sellerAmount);
     }
 
@@ -334,6 +343,8 @@ contract Agora402Escrow is ReentrancyGuard, Pausable {
         e.state = EscrowState.Refunded;
 
         usdc.safeTransfer(e.buyer, e.amount);
+
+        _recordReputation(e.buyer, e.seller, e.amount, escrowId, Agora402Reputation.Outcome.Refunded);
 
         emit EscrowRefunded(escrowId, e.amount);
     }
@@ -401,6 +412,12 @@ contract Agora402Escrow is ReentrancyGuard, Pausable {
         emit RouterUpdated(router, authorized);
     }
 
+    /// @notice Set the on-chain reputation contract. Use address(0) to disable.
+    function setReputation(address _reputation) external onlyOwner {
+        reputation = Agora402Reputation(_reputation);
+        emit ReputationUpdated(_reputation);
+    }
+
     /// @notice Pause the contract (emergency)
     function pause() external onlyOwner {
         _pause();
@@ -415,5 +432,18 @@ contract Agora402Escrow is ReentrancyGuard, Pausable {
 
     function _calculateFee(uint256 amount) internal view returns (uint256) {
         return (amount * feeBps) / BPS_DENOMINATOR;
+    }
+
+    /// @notice Record escrow outcome to the on-chain reputation ledger (if set)
+    function _recordReputation(
+        address buyer,
+        address seller,
+        uint256 amount,
+        uint256 escrowId,
+        Agora402Reputation.Outcome outcome
+    ) internal {
+        if (address(reputation) != address(0)) {
+            reputation.recordOutcome(buyer, seller, amount, escrowId, outcome);
+        }
     }
 }
