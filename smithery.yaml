@@ -1,0 +1,24 @@
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    required:
+      - PRIVATE_KEY
+    properties:
+      PRIVATE_KEY:
+        type: string
+        description: "Agent wallet private key (hex with 0x prefix). Run `npx agora402 init` to generate one."
+      CHAIN:
+        type: string
+        enum: ["base-sepolia", "base"]
+        default: "base-sepolia"
+        description: "Which Base network to use. Defaults to testnet."
+  commandFunction: |-
+    config => ({
+      command: 'npx',
+      args: ['-y', 'agora402'],
+      env: {
+        PRIVATE_KEY: config.PRIVATE_KEY,
+        ...(config.CHAIN ? { CHAIN: config.CHAIN } : {})
+      }
+    })
