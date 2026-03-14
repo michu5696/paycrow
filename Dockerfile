@@ -7,11 +7,10 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml turbo.json tsconfig.base.json ./
 
 # Only include packages needed for the trust API server
-RUN echo 'packages:\n  - "packages/core"\n  - "packages/trust"\n  - "packages/db"\n  - "packages/escrow-client"\n  - "packages/verification"\n  - "packages/x402-bridge"\n  - "packages/mcp-server"' > pnpm-workspace.yaml
+RUN echo 'packages:\n  - "packages/core"\n  - "packages/trust"\n  - "packages/escrow-client"\n  - "packages/verification"\n  - "packages/x402-bridge"\n  - "packages/mcp-server"' > pnpm-workspace.yaml
 
 COPY packages/core/package.json packages/core/
 COPY packages/trust/package.json packages/trust/
-COPY packages/db/package.json packages/db/
 COPY packages/escrow-client/package.json packages/escrow-client/
 COPY packages/verification/package.json packages/verification/
 COPY packages/x402-bridge/package.json packages/x402-bridge/
