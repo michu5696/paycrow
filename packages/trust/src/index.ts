@@ -8,3 +8,4 @@ export { registerAllTools, type ToolConfig } from "./tools.js";
 export { fetchWithRetry, type RetryOptions } from "./utils/retry.js";
 export { TtlCache, type CacheOptions } from "./utils/cache.js";
 export { RateLimiter, type RateLimitOptions } from "./utils/rate-limit.js";
+export { paycrowRequired, detectPayCrowRequirement, type PayCrowRequiredConfig, type PayCrowExtension } from "./middleware.js";

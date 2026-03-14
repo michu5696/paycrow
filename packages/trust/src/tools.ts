@@ -22,6 +22,7 @@ import {
 } from "@paycrow/core";
 import { EscrowClient } from "@paycrow/escrow-client";
 import { verify } from "@paycrow/verification";
+import { detectPayCrowRequirement } from "./middleware.js";
 import type { Chain, Hash } from "viem";
 
 export interface ToolConfig {
@@ -36,6 +37,7 @@ export interface ToolConfig {
 export function registerAllTools(server: McpServer, config: ToolConfig): void {
   registerTrustTools(server, config);
   registerEscrowTools(server, config);
+  registerDiscoveryTools(server);
   registerX402Tools(server, config);
 }
 
@@ -371,6 +373,80 @@ Ratings are on-chain and permanent — they feed directly into trust scoring.`,
           content: [{ type: "text" as const, text: JSON.stringify({
             success: false, escrowId: escrow_id,
             error: error instanceof Error ? error.message : "Failed to submit rating",
+          }) }],
+        };
+      }
+    }
+  );
+}
+
+// ─── Discovery Tool ───────────────────────────────────────────────────
+
+function registerDiscoveryTools(server: McpServer): void {
+  server.tool(
+    "escrow_check",
+    `Probe a URL to check if it requires PayCrow escrow protection.
+
+Some x402 services require escrow-protected payment — their 402 response includes
+a PayCrow extension with escrow requirements. This tool checks a URL and tells you
+if escrow is required, and what parameters to use.
+
+Call this BEFORE paying any new x402 service to check if they require escrow.`,
+    {
+      url: z.string().url().describe("The URL to check for escrow requirements"),
+    },
+    async ({ url }) => {
+      try {
+        const res = await fetch(url, {
+          method: "GET",
+          signal: AbortSignal.timeout(10000),
+        });
+
+        if (res.status === 402) {
+          const body = await res.json() as Record<string, unknown>;
+          const escrowReq = detectPayCrowRequirement(body);
+
+          if (escrowReq) {
+            return {
+              content: [{ type: "text" as const, text: JSON.stringify({
+                url,
+                escrowRequired: true,
+                seller: escrowReq.seller,
+                maxAmount: escrowReq.maxAmount,
+                disputeWindowMinutes: escrowReq.disputeWindowMinutes,
+                minTrustScore: escrowReq.minTrustScore,
+                chain: escrowReq.chain,
+                message: `This service requires PayCrow escrow protection. Use safe_pay with seller_address=${escrowReq.seller} to pay securely.`,
+                nextStep: `Call safe_pay with url="${url}", seller_address="${escrowReq.seller}", and your desired amount.`,
+              }, null, 2) }],
+            };
+          }
+
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify({
+              url,
+              escrowRequired: false,
+              status: 402,
+              message: "This is an x402 endpoint but does not require PayCrow escrow. You can still use safe_pay for protection, or pay directly.",
+            }, null, 2) }],
+          };
+        }
+
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({
+            url,
+            escrowRequired: false,
+            status: res.status,
+            message: res.status === 200
+              ? "This endpoint is freely accessible (no payment required)."
+              : `Endpoint returned HTTP ${res.status}. Not an x402 endpoint.`,
+          }, null, 2) }],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({
+            url,
+            error: error instanceof Error ? error.message : "Failed to probe URL",
           }) }],
         };
       }

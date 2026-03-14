@@ -18,3 +18,6 @@ contracts/broadcast/
 
 # MCP Registry tokens
 .mcpregistry_*
+
+# Marketing content drafts (not for repo)
+content/
